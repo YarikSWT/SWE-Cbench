@@ -204,7 +204,6 @@ class ContextManager:
                 timeout=5
             )
             if result.returncode == 0:
-                import json
                 conda_info = json.loads(result.stdout)
                 env_info["conda_info"] = {
                     "active_prefix": conda_info.get("active_prefix"),
@@ -349,6 +348,7 @@ def string_to_bool(v):
         raise ArgumentTypeError(
             f"Truthy value expected: got {v} but expected one of yes/no, true/false, t/f, y/n, 1/0 (case insensitive)."
         )
+
 
 
 
