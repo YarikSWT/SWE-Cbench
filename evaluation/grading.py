@@ -40,22 +40,45 @@ def get_logs_eval(test_spec: TestSpec, log_fp: str) -> tuple[dict[str, str], boo
     Retrieve evaluation results for a task instance from its corresponding log file
 
     Args:
+        test_spec (TestSpec): Test specification containing repo and version info
         log_fp (str): path to log file
     Returns:
-        bool: whether the patch applied successfully
-        dict: status map
-
-    TODO(john-b-yang): Check this is working properly...
+        tuple[dict[str, str], bool]: (status_map, success_flag)
+            - status_map: Dictionary mapping test cases to their status
+            - success_flag: Whether the patch applied successfully and tests ran
     """
+    # Validate inputs
+    if not test_spec:
+        logging.error("get_logs_eval: test_spec is None or empty")
+        return {}, False
+    
+    if not log_fp or not os.path.exists(log_fp):
+        logging.error(f"get_logs_eval: Log file does not exist: {log_fp}")
+        return {}, False
+    
     repo = test_spec.repo
     version = test_spec.version
+    
+    # Validate repo and version are in the expected mappings
+    if repo not in MAP_REPO_TO_PARSER:
+        logging.error(f"get_logs_eval: No parser found for repo: {repo}")
+        return {}, False
+    
+    if repo not in MAP_REPO_VERSION_TO_SPECS or version not in MAP_REPO_VERSION_TO_SPECS[repo]:
+        logging.error(f"get_logs_eval: No specs found for repo {repo}, version {version}")
+        return {}, False
+    
     log_parser = MAP_REPO_TO_PARSER[repo]
     test_cmd = MAP_REPO_VERSION_TO_SPECS[repo][version]["test_cmd"]
     if isinstance(test_cmd, list):
         test_cmd = test_cmd[-1]
 
-    with open(log_fp) as f:
-        content = f.read()
+    try:
+        with open(log_fp, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except (IOError, UnicodeDecodeError) as e:
+        logging.error(f"get_logs_eval: Failed to read log file {log_fp}: {e}")
+        return {}, False
         # TODO fix constant here
         bad_codes = list(
             filter(
@@ -280,4 +303,5 @@ def get_eval_report(
         report_map[instance_id]["tests_status"] = report  # type: ignore
 
     return report_map
+
 
