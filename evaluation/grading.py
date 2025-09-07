@@ -1,4 +1,6 @@
 from typing import Any
+import logging
+import os
 
 from constants import (
     APPLY_PATCH_FAIL,
@@ -278,3 +280,4 @@ def get_eval_report(
         report_map[instance_id]["tests_status"] = report  # type: ignore
 
     return report_map
+
