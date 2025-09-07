@@ -5,6 +5,7 @@ import chardet
 import subprocess
 import sys
 import platform
+import json
 from argparse import ArgumentTypeError
 from git import Repo
 from pathlib import Path
@@ -348,5 +349,6 @@ def string_to_bool(v):
         raise ArgumentTypeError(
             f"Truthy value expected: got {v} but expected one of yes/no, true/false, t/f, y/n, 1/0 (case insensitive)."
         )
+
 
 
