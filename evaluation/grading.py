@@ -34,6 +34,44 @@ def test_failed(case: str, sm: dict[str, str]) -> bool:
     return case not in sm or sm[case] in [TestStatus.FAILED.value, TestStatus.ERROR.value]
 
 
+def get_error_patterns_for_repo(repo: str) -> dict[str, str]:
+    """
+    Get configurable error patterns for a specific repository.
+    This replaces the hardcoded bad_codes approach with a more flexible system.
+    
+    Args:
+        repo (str): Repository name
+        
+    Returns:
+        dict[str, str]: Dictionary mapping error pattern names to their text patterns
+    """
+    # Default error patterns that apply to all repositories
+    default_patterns = {
+        "apply_patch_fail": APPLY_PATCH_FAIL,
+        "reset_failed": RESET_FAILED,
+        "tests_error": TESTS_ERROR,
+        "tests_timeout": TESTS_TIMEOUT,
+    }
+    
+    # Repository-specific error patterns can be added here
+    repo_specific_patterns = {
+        # Example: Add repo-specific patterns if needed
+        # "redis": {
+        #     "redis_specific_error": "Redis connection failed",
+        # },
+        # "llvm": {
+        #     "llvm_build_error": "LLVM build failed",
+        # },
+    }
+    
+    # Combine default patterns with repo-specific ones
+    patterns = default_patterns.copy()
+    if repo in repo_specific_patterns:
+        patterns.update(repo_specific_patterns[repo])
+    
+    return patterns
+
+
 # MARK: Evaluation report functions
 def get_logs_eval(test_spec: TestSpec, log_fp: str) -> tuple[dict[str, str], bool]:
     """
@@ -310,6 +348,7 @@ def get_eval_report(
         report_map[instance_id]["tests_status"] = report  # type: ignore
 
     return report_map
+
 
 
 
