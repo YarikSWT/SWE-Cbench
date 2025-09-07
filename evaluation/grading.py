@@ -79,27 +79,34 @@ def get_logs_eval(test_spec: TestSpec, log_fp: str) -> tuple[dict[str, str], boo
     except (IOError, UnicodeDecodeError) as e:
         logging.error(f"get_logs_eval: Failed to read log file {log_fp}: {e}")
         return {}, False
-        # TODO fix constant here
-        bad_codes = list(
-            filter(
-                lambda x: x in content,
-                [
-                    APPLY_PATCH_FAIL,
-                    RESET_FAILED,
-                    TESTS_ERROR,
-                    TESTS_TIMEOUT,
-                ],
-            )
-        )
-        if bad_codes:
-            return {}, False
-        elif not (START_TEST_OUTPUT in content and END_TEST_OUTPUT in content):
-            # Test patch did not apply (should not happen at all)
-            return {}, False
+    
+    # Check for error patterns using configurable approach instead of hardcoded constants
+    error_patterns = get_error_patterns_for_repo(repo)
+    detected_errors = []
+    
+    for pattern_name, pattern_text in error_patterns.items():
+        if pattern_text in content:
+            detected_errors.append(pattern_name)
+            logging.warning(f"get_logs_eval: Detected error pattern '{pattern_name}' in log file {log_fp}")
+    
+    if detected_errors:
+        logging.error(f"get_logs_eval: Found error patterns {detected_errors} in log file {log_fp}")
+        return {}, False
+    
+    # Validate that test output markers are present
+    if not (START_TEST_OUTPUT in content and END_TEST_OUTPUT in content):
+        logging.error(f"get_logs_eval: Missing test output markers in log file {log_fp}")
+        return {}, False
 
-        # Get status map of evaluation results
+    # Extract test output content and parse it
+    try:
         content = content.split(START_TEST_OUTPUT)[1].split(END_TEST_OUTPUT)[0]
-        return log_parser(content, test_spec), True
+        status_map = log_parser(content, test_spec)
+        logging.info(f"get_logs_eval: Successfully parsed {len(status_map)} test results from {log_fp}")
+        return status_map, True
+    except (IndexError, ValueError) as e:
+        logging.error(f"get_logs_eval: Failed to parse test output from {log_fp}: {e}")
+        return {}, False
 
 
 def get_eval_tests_report(
@@ -303,5 +310,6 @@ def get_eval_report(
         report_map[instance_id]["tests_status"] = report  # type: ignore
 
     return report_map
+
 
 
