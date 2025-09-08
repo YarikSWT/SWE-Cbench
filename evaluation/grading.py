@@ -1,4 +1,6 @@
 from typing import Any
+import logging
+import os
 
 from constants import (
     APPLY_PATCH_FAIL,
@@ -32,49 +34,117 @@ def test_failed(case: str, sm: dict[str, str]) -> bool:
     return case not in sm or sm[case] in [TestStatus.FAILED.value, TestStatus.ERROR.value]
 
 
+def get_error_patterns_for_repo(repo: str) -> dict[str, str]:
+    """
+    Get configurable error patterns for a specific repository.
+    This replaces the hardcoded bad_codes approach with a more flexible system.
+    
+    Args:
+        repo (str): Repository name
+        
+    Returns:
+        dict[str, str]: Dictionary mapping error pattern names to their text patterns
+    """
+    # Default error patterns that apply to all repositories
+    default_patterns = {
+        "apply_patch_fail": APPLY_PATCH_FAIL,
+        "reset_failed": RESET_FAILED,
+        "tests_error": TESTS_ERROR,
+        "tests_timeout": TESTS_TIMEOUT,
+    }
+    
+    # Repository-specific error patterns can be added here
+    repo_specific_patterns = {
+        # Example: Add repo-specific patterns if needed
+        # "redis": {
+        #     "redis_specific_error": "Redis connection failed",
+        # },
+        # "llvm": {
+        #     "llvm_build_error": "LLVM build failed",
+        # },
+    }
+    
+    # Combine default patterns with repo-specific ones
+    patterns = default_patterns.copy()
+    if repo in repo_specific_patterns:
+        patterns.update(repo_specific_patterns[repo])
+    
+    return patterns
+
+
 # MARK: Evaluation report functions
 def get_logs_eval(test_spec: TestSpec, log_fp: str) -> tuple[dict[str, str], bool]:
     """
     Retrieve evaluation results for a task instance from its corresponding log file
 
     Args:
+        test_spec (TestSpec): Test specification containing repo and version info
         log_fp (str): path to log file
     Returns:
-        bool: whether the patch applied successfully
-        dict: status map
-
-    TODO(john-b-yang): Check this is working properly...
+        tuple[dict[str, str], bool]: (status_map, success_flag)
+            - status_map: Dictionary mapping test cases to their status
+            - success_flag: Whether the patch applied successfully and tests ran
     """
+    # Validate inputs
+    if not test_spec:
+        logging.error("get_logs_eval: test_spec is None or empty")
+        return {}, False
+    
+    if not log_fp or not os.path.exists(log_fp):
+        logging.error(f"get_logs_eval: Log file does not exist: {log_fp}")
+        return {}, False
+    
     repo = test_spec.repo
     version = test_spec.version
+    
+    # Validate repo and version are in the expected mappings
+    if repo not in MAP_REPO_TO_PARSER:
+        logging.error(f"get_logs_eval: No parser found for repo: {repo}")
+        return {}, False
+    
+    if repo not in MAP_REPO_VERSION_TO_SPECS or version not in MAP_REPO_VERSION_TO_SPECS[repo]:
+        logging.error(f"get_logs_eval: No specs found for repo {repo}, version {version}")
+        return {}, False
+    
     log_parser = MAP_REPO_TO_PARSER[repo]
     test_cmd = MAP_REPO_VERSION_TO_SPECS[repo][version]["test_cmd"]
     if isinstance(test_cmd, list):
         test_cmd = test_cmd[-1]
 
-    with open(log_fp) as f:
-        content = f.read()
-        # TODO fix constant here
-        bad_codes = list(
-            filter(
-                lambda x: x in content,
-                [
-                    APPLY_PATCH_FAIL,
-                    RESET_FAILED,
-                    TESTS_ERROR,
-                    TESTS_TIMEOUT,
-                ],
-            )
-        )
-        if bad_codes:
-            return {}, False
-        elif not (START_TEST_OUTPUT in content and END_TEST_OUTPUT in content):
-            # Test patch did not apply (should not happen at all)
-            return {}, False
+    try:
+        with open(log_fp, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except (IOError, UnicodeDecodeError) as e:
+        logging.error(f"get_logs_eval: Failed to read log file {log_fp}: {e}")
+        return {}, False
+    
+    # Check for error patterns using configurable approach instead of hardcoded constants
+    error_patterns = get_error_patterns_for_repo(repo)
+    detected_errors = []
+    
+    for pattern_name, pattern_text in error_patterns.items():
+        if pattern_text in content:
+            detected_errors.append(pattern_name)
+            logging.warning(f"get_logs_eval: Detected error pattern '{pattern_name}' in log file {log_fp}")
+    
+    if detected_errors:
+        logging.error(f"get_logs_eval: Found error patterns {detected_errors} in log file {log_fp}")
+        return {}, False
+    
+    # Validate that test output markers are present
+    if not (START_TEST_OUTPUT in content and END_TEST_OUTPUT in content):
+        logging.error(f"get_logs_eval: Missing test output markers in log file {log_fp}")
+        return {}, False
 
-        # Get status map of evaluation results
+    # Extract test output content and parse it
+    try:
         content = content.split(START_TEST_OUTPUT)[1].split(END_TEST_OUTPUT)[0]
-        return log_parser(content, test_spec), True
+        status_map = log_parser(content, test_spec)
+        logging.info(f"get_logs_eval: Successfully parsed {len(status_map)} test results from {log_fp}")
+        return status_map, True
+    except (IndexError, ValueError) as e:
+        logging.error(f"get_logs_eval: Failed to parse test output from {log_fp}: {e}")
+        return {}, False
 
 
 def get_eval_tests_report(
@@ -278,3 +348,52 @@ def get_eval_report(
         report_map[instance_id]["tests_status"] = report  # type: ignore
 
     return report_map
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -3,6 +3,9 @@ import re
 import ast
 import chardet
 import subprocess
+import sys
+import platform
+import json
 from argparse import ArgumentTypeError
 from git import Repo
 from pathlib import Path
@@ -168,7 +171,50 @@ class ContextManager:
         return self
 
     def get_environment(self):
-        raise NotImplementedError()  # TODO: activate conda environment and return the environment file
+        """
+        Get environment information for the current repository context.
+        
+        Returns:
+            dict: Environment information including Python version, platform, and basic system details
+        """
+        env_info = {
+            "python_version": sys.version,
+            "python_executable": sys.executable,
+            "platform": platform.platform(),
+            "system": platform.system(),
+            "architecture": platform.architecture(),
+            "machine": platform.machine(),
+            "processor": platform.processor(),
+            "repo_path": self.repo_path,
+            "base_commit": self.base_commit,
+            "working_directory": os.getcwd()
+        }
+        
+        # Check if conda is available and get conda environment info
+        try:
+            conda_env = os.environ.get("CONDA_DEFAULT_ENV")
+            if conda_env:
+                env_info["conda_environment"] = conda_env
+            
+            # Try to get conda info if available
+            result = subprocess.run(
+                ["conda", "info", "--json"], 
+                capture_output=True, 
+                text=True, 
+                timeout=5
+            )
+            if result.returncode == 0:
+                conda_info = json.loads(result.stdout)
+                env_info["conda_info"] = {
+                    "active_prefix": conda_info.get("active_prefix"),
+                    "conda_version": conda_info.get("conda_version"),
+                    "python_version": conda_info.get("python_version")
+                }
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError, json.JSONDecodeError):
+            # Conda not available or failed to get info, continue without it
+            pass
+            
+        return env_info
 
     def get_readme_files(self):
         files = os.listdir(self.repo_path)
@@ -302,3 +348,7 @@ def string_to_bool(v):
         raise ArgumentTypeError(
             f"Truthy value expected: got {v} but expected one of yes/no, true/false, t/f, y/n, 1/0 (case insensitive)."
         )
+
+
+
+
